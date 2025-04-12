@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  jobmanager:
+    image: flink:1.18.1-java11 # Use the same Flink version as in Dockerfile and pom.xml
+    ports:
+      - "8081:8081" # Flink UI
+    command: jobmanager
+    environment:
+      - | # Use YAML multi-line string for FLINK_PROPERTIES
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+    networks:
+      - flink-network
+
+  taskmanager:
+    image: flink:1.18.1-java11 # Use the same Flink version
+    depends_on:
+      - jobmanager
+    command: taskmanager
+    environment:
+      - | # Use YAML multi-line string for FLINK_PROPERTIES
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 2 # Adjust as needed
+    networks:
+      - flink-network
+
+  # This service builds the application image and submits the job
+  job-submitter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - jobmanager # Wait for jobmanager to start (basic dependency)
+    environment:
+      - | # Use YAML multi-line string for FLINK_PROPERTIES
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+    # Command to submit the job JAR to the Flink cluster
+    # Waits 10 seconds for the cluster to potentially initialize
+    # Adjust the JAR name if your artifactId or version differs
+    command: >
+      bash -c "sleep 10 && \
+               flink run -d -m jobmanager:8081 /app/target/flink-crypto-demo-1.0-SNAPSHOT.jar"
+    networks:
+      - flink-network
+
+networks:
+  flink-network:
+    driver: bridge 
