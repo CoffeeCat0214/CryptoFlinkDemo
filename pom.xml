@@ -1,4 +1,6 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
@@ -7,16 +9,16 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>Flink Crypto Demo</name>
-    <url>http://maven.apache.org</url>
+    <name>Flink Crypto Price Aggregation Demo</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <flink.version>1.18.1</flink.version> <!-- Use a recent Flink version -->
+        <flink.version>1.17.1</flink.version> <!-- Use a recent stable Flink version -->
         <java.version>11</java.version>
+        <scala.binary.version>2.12</scala.binary.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
-        <log4j.version>2.17.1</log4j.version> <!-- Log4j2 version -->
+        <log4j.version>2.17.1</log4j.version> <!-- Using a secure log4j version -->
     </properties>
 
     <dependencies>
@@ -25,23 +27,19 @@
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-streaming-java</artifactId>
             <version>${flink.version}</version>
-            <scope>provided</scope>
+            <scope>provided</scope> <!-- Provided by Flink cluster -->
         </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-clients</artifactId>
             <version>${flink.version}</version>
-            <scope>provided</scope>
+            <scope>provided</scope> <!-- Provided by Flink cluster -->
         </dependency>
-
-        <!-- Add connector dependencies here if needed, e.g., Kafka -->
-        <!--
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-connector-kafka</artifactId>
             <version>${flink.version}</version>
         </dependency>
-        -->
 
         <!-- Logging Dependencies -->
         <dependency>
@@ -79,7 +77,7 @@
             </plugin>
 
             <!-- We use the maven-shade plugin to create a fat jar that contains all dependencies
-            except flink and its transitive dependencies. These are supposed to be part of the Flink cluster already. -->
+            except flink and its transitive dependencies, which are provided by the Flink cluster -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -93,10 +91,9 @@
                         <configuration>
                             <artifactSet>
                                 <excludes>
-                                    <exclude>org.apache.flink:flink-shaded-force-shading</exclude>
-                                    <exclude>com.google.code.findbugs:jsr305</exclude>
+                                    <exclude>org.apache.flink:flink-*:*</exclude>
+                                    <exclude>log4j:*</exclude> <!-- Exclude log4j from fat jar if cluster provides it -->
                                     <exclude>org.slf4j:*</exclude>
-                                    <exclude>org.apache.logging.log4j:*</exclude>
                                 </excludes>
                             </artifactSet>
                             <filters>
@@ -113,11 +110,10 @@
                             </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <!-- Replace 'com.example.flink.StreamingJob' with your main class -->
                                     <mainClass>com.example.flink.StreamingJob</mainClass>
                                 </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>
-                            <createDependencyReducedPom>false</createDependencyReducedPom>
                         </configuration>
                     </execution>
                 </executions>

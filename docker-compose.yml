@@ -1,51 +1,105 @@
 version: '3.8'
-
 services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.2 # Use a version compatible with Kafka
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - flink-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.2
+    hostname: kafka
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      # Expose Kafka broker for external connections (e.g., producer from host)
+      - "9092:9092"
+      # Internal listener used by Flink within the Docker network
+      - "9093:9093" 
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      # Listener configuration for internal and external access
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      # Topic settings
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      # Create the topic automatically if it doesn't exist
+      KAFKA_CREATE_TOPICS: "crypto-tickers:1:1" 
+    networks:
+      - flink-net
+
   jobmanager:
-    image: flink:1.18.1-java11 # Use the same Flink version as in Dockerfile and pom.xml
+    build: .
+    hostname: jobmanager
+    container_name: jobmanager
     ports:
       - "8081:8081" # Flink UI
-    command: jobmanager
+    command: jobmanager # Start Flink JobManager process
     environment:
-      - | # Use YAML multi-line string for FLINK_PROPERTIES
-        FLINK_PROPERTIES=
+      FLINK_PROPERTIES: |
         jobmanager.rpc.address: jobmanager
+        # Add any other Flink config options here if needed
+    depends_on:
+      - kafka # Ensure Kafka is up before Flink cluster starts
     networks:
-      - flink-network
+      - flink-net
 
   taskmanager:
-    image: flink:1.18.1-java11 # Use the same Flink version
+    build: . # Use the same image built for jobmanager
+    hostname: taskmanager # Unique hostname is good practice, though not strictly needed for one TM
+    container_name: taskmanager
     depends_on:
       - jobmanager
-    command: taskmanager
+      - kafka
+    command: taskmanager # Start Flink TaskManager process
     environment:
-      - | # Use YAML multi-line string for FLINK_PROPERTIES
-        FLINK_PROPERTIES=
+      FLINK_PROPERTIES: |
         jobmanager.rpc.address: jobmanager
-        taskmanager.numberOfTaskSlots: 2 # Adjust as needed
+        taskmanager.numberOfTaskSlots: 2 
+        # Add any other Flink config options here if needed
     networks:
-      - flink-network
+      - flink-net
 
-  # This service builds the application image and submits the job
+  # Service to submit the Flink job after the cluster is ready
   job-submitter:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
+    container_name: job-submitter
     depends_on:
-      - jobmanager # Wait for jobmanager to start (basic dependency)
-    environment:
-      - | # Use YAML multi-line string for FLINK_PROPERTIES
-        FLINK_PROPERTIES=
-        jobmanager.rpc.address: jobmanager
-    # Command to submit the job JAR to the Flink cluster
-    # Waits 10 seconds for the cluster to potentially initialize
-    # Adjust the JAR name if your artifactId or version differs
+      - jobmanager
+    # Command to wait for JobManager and then submit the JAR
+    # It uses the JAR copied into the image at /opt/flink/usrlib/
     command: >
-      bash -c "sleep 10 && \
-               flink run -d -m jobmanager:8081 /app/target/flink-crypto-demo-1.0-SNAPSHOT.jar"
+      bash -c "
+        echo 'Waiting for JobManager REST interface...';
+        while ! curl -s http://jobmanager:8081/overview > /dev/null; do
+          sleep 1;
+        done;
+        echo 'JobManager is ready. Submitting job...';
+        flink run \
+          -d \
+          /opt/flink/usrlib/flink-crypto-demo.jar \
+          --kafka-brokers kafka:9093 \
+          --kafka-topic crypto-tickers \
+          --consumer-group flink-crypto-consumer
+          # Note: We pass args here, but the current StreamingJob.java uses constants.
+          # Modify StreamingJob.java to accept ParameterTool if you want to use these args.
+        echo 'Job submission command executed.'
+      "
     networks:
-      - flink-network
+      - flink-net
 
 networks:
-  flink-network:
+  flink-net:
     driver: bridge 

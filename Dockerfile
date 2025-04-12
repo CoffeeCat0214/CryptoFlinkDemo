@@ -1,32 +1,35 @@
-# Use an official Flink runtime image with Java 11 as a parent image
-# Make sure the Flink version matches the one in pom.xml
-FROM flink:1.18.1-java11
+# Stage 1: Build the application JAR using Maven
+FROM maven:3.8.4-openjdk-11 AS builder
 
-# Set the working directory in the container
+# Set the working directory
 WORKDIR /app
 
-# Copy the Maven project file
+# Copy the pom.xml file
 COPY pom.xml .
+
+# Download dependencies (this layer is cached if pom.xml doesn't change)
+RUN mvn dependency:go-offline
 
 # Copy the source code
 COPY src ./src
 
-# Build the application using Maven
-# This will download dependencies and compile the code, creating the fat JAR
-# We use the flink user provided by the base image
-USER root
-RUN chown -R flink:flink /app
-USER flink
-RUN mvn clean package -DskipTests
+# Package the application (compile, test, and create JAR)
+# The fat JAR will be created in target/
+RUN mvn package -DskipTests
 
-# The final JAR will be in the target directory
-# Example: target/flink-crypto-demo-1.0-SNAPSHOT.jar
-# We don't need to set an ENTRYPOINT here, as the job will be submitted via the Flink CLI
-# using docker-compose.
+# Stage 2: Create the final Flink application image
+FROM flink:1.17.1-java11
 
-# Expose the default Flink JobManager ports (optional, mainly for reference)
-# EXPOSE 6123
-# EXPOSE 8081
+# Set the working directory in the Flink image
+WORKDIR /opt/flink
 
-# Default command (optional, can be overridden)
-# CMD ["/bin/bash"] 
+# Copy the fat JAR from the builder stage to the Flink plugins directory
+# Flink automatically picks up JARs from /opt/flink/usrlib
+COPY --from=builder /app/target/flink-crypto-demo-1.0-SNAPSHOT.jar /opt/flink/usrlib/flink-crypto-demo.jar
+
+# Note: We don't need an explicit ENTRYPOINT or CMD here because
+# the Flink base image provides the necessary scripts (jobmanager.sh, taskmanager.sh).
+# The JAR will be submitted externally via docker-compose.
+
+# Expose the JobManager REST port (optional, but good practice)
+EXPOSE 8081 
