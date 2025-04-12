@@ -91,9 +91,12 @@
                         <configuration>
                             <artifactSet>
                                 <excludes>
-                                    <exclude>org.apache.flink:flink-*:*</exclude>
-                                    <exclude>log4j:*</exclude> <!-- Exclude log4j from fat jar if cluster provides it -->
+                                    <!-- Exclude log4j and slf4j as they are often provided by the Flink environment -->
+                                    <exclude>org.apache.logging.log4j:*</exclude>
+                                    <exclude>log4j:*</exclude> 
                                     <exclude>org.slf4j:*</exclude>
+                                    <!-- Core Flink dependencies with 'provided' scope are excluded automatically by Maven -->
+                                    <!-- Keep other transitive dependencies unless they cause issues -->
                                 </excludes>
                             </artifactSet>
                             <filters>

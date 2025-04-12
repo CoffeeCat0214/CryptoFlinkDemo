@@ -5,6 +5,8 @@ import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.AggregateFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
+import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -24,6 +26,7 @@ public class StreamingJob {
 
     private static final String KAFKA_BROKERS = "kafka:9093"; // Use the internal Docker network hostname
     private static final String KAFKA_TOPIC = "crypto-tickers";
+    private static final String KAFKA_AGGREGATION_TOPIC = "crypto-aggregations"; // Topic for aggregated results
     private static final String CONSUMER_GROUP_ID = "flink-crypto-consumer";
 
     public static void main(String[] args) throws Exception {
@@ -55,6 +58,20 @@ public class StreamingJob {
                 .filter(data -> data != null) // Filter out potential parsing errors
                 .assignTimestampsAndWatermarks(watermarkStrategy);
 
+        // Create Kafka Sink for aggregations
+        KafkaSink<String> kafkaSink = KafkaSink.<String>builder()
+                .setBootstrapServers(KAFKA_BROKERS) // Sink using the internal network
+                .setRecordSerializer(KafkaRecordSerializationSchema.builder()
+                        .setTopic(KAFKA_AGGREGATION_TOPIC)
+                        .setValueSerializationSchema(new SimpleStringSchema())
+                        // Optionally set a key serializer if needed, e.g., based on crypto symbol
+                        // .setKeySerializationSchema(...) 
+                        .build()
+                )
+                // Add other properties like delivery guarantees if needed
+                // .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE) 
+                .build();
+
         // --- Define Windows and Aggregations --- 
 
         // Key by symbol
@@ -84,9 +101,16 @@ public class StreamingJob {
 
         // --- Print Results --- 
         resultStream10s.print().name("Print 10s Avg");
+        resultStream10s.sinkTo(kafkaSink).name("Sink 10s Avg to Kafka");
+
         resultStream1m.print().name("Print 1m Avg");
+        resultStream1m.sinkTo(kafkaSink).name("Sink 1m Avg to Kafka");
+
         resultStream5m.print().name("Print 5m Avg");
+        resultStream5m.sinkTo(kafkaSink).name("Sink 5m Avg to Kafka");
+
         resultStream10m.print().name("Print 10m Avg");
+        resultStream10m.sinkTo(kafkaSink).name("Sink 10m Avg to Kafka");
 
         // Execute the job
         env.execute("Flink Crypto Price Averaging (Kafka Source)");

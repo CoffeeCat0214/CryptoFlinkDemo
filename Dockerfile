@@ -27,6 +27,10 @@ WORKDIR /opt/flink
 # Flink automatically picks up JARs from /opt/flink/usrlib
 COPY --from=builder /app/target/flink-crypto-demo-1.0-SNAPSHOT.jar /opt/flink/usrlib/flink-crypto-demo.jar
 
+# Copy the job submission script
+COPY submit-job.sh /opt/flink/
+RUN chmod +x /opt/flink/submit-job.sh
+
 # Note: We don't need an explicit ENTRYPOINT or CMD here because
 # the Flink base image provides the necessary scripts (jobmanager.sh, taskmanager.sh).
 # The JAR will be submitted externally via docker-compose.

@@ -36,7 +36,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       # Create the topic automatically if it doesn't exist
-      KAFKA_CREATE_TOPICS: "crypto-tickers:1:1"
+      KAFKA_CREATE_TOPICS: "crypto-tickers:1:1,crypto-aggregations:1:1"
     networks:
       - flink-net
 
@@ -89,19 +89,7 @@ services:
       - jobmanager
     # Command to wait for JobManager and then submit the JAR
     # It uses the JAR copied into the image at /opt/flink/usrlib/
-    command: >
-      bash -c "
-        echo 'Waiting for JobManager REST interface...';
-        while ! curl -s http://jobmanager:8081/overview > /dev/null; do
-          sleep 1;
-        done;
-        echo 'JobManager is ready. Submitting job...';
-        flink run \
-          -d \
-          /opt/flink/usrlib/flink-crypto-demo.jar
-          # Note: Arguments removed as StreamingJob.java uses constants now.
-        echo 'Job submission command executed.'
-      "
+    command: ["/opt/flink/submit-job.sh"] # Execute the script directly
     networks:
       - flink-net
 
@@ -118,7 +106,23 @@ services:
       KAFKA_BROKERS_INTERNAL: "kafka:9093"
     networks:
       - flink-net
-    # restart: on-failure # Optional: Restart the producer if it fails
+    restart: on-failure # Optional: Restart the producer if it fails
+
+  # NEW: Service for the Python live aggregation viewer
+  live-agg-viewer:
+    build:
+      context: . # Use the current directory as context
+      dockerfile: viewer.Dockerfile # Specify the new viewer Dockerfile
+    container_name: live-agg-viewer
+    depends_on:
+      - kafka # Ensure Kafka is ready before starting the viewer
+      - job-submitter # Optionally wait for the job to be submitted
+    environment:
+      # Ensure the viewer uses the internal Kafka address
+      KAFKA_BROKER_VIEWER: "kafka:9093"
+    networks:
+      - flink-net
+    restart: on-failure # Optional: Restart the viewer if it fails
 
 networks:
   flink-net:
