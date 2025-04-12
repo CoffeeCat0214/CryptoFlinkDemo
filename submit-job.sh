@@ -3,6 +3,11 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
+# --- Wait for Kafka first ---
+echo 'Waiting 20 seconds for Kafka topic creation...'
+sleep 20
+# ---------------------------
+
 echo 'Waiting up to 60 seconds for JobManager REST interface at http://jobmanager:8081/overview ...'
 counter=0
 while ! curl -s --fail --max-time 5 http://jobmanager:8081/overview > /dev/null; do

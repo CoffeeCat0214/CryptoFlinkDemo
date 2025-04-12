@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO,
 # Coinbase WebSocket Feed
 COINBASE_WS_URL = "wss://ws-feed.exchange.coinbase.com"
 # Symbols in Coinbase format
-SYMBOLS_COINBASE = ["BTC-USD", "ETH-USD", "LTC-USD"] 
+SYMBOLS_COINBASE = ["BTC-USD", "ETH-USD", "DOGE-USD"] 
 # We will subscribe to the 'matches' channel for trade data
 CHANNELS_TO_SUBSCRIBE = ["matches"]
 
@@ -25,7 +25,7 @@ CHANNELS_TO_SUBSCRIBE = ["matches"]
 TARGET_SYMBOLS_MAP = { 
     "BTC-USD": "BTC/USD",
     "ETH-USD": "ETH/USD",
-    "LTC-USD": "LTC/USD"
+    "DOGE-USD": "DOGE/USD"
 }
 
 # Read Kafka broker from environment variable, default to localhost:9092
